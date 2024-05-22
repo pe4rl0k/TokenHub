@@ -61,13 +61,39 @@ async function getTokenDetails(req: Request, res: Response): Promise<void> {
   }
 }
 
+async function createToken(req: Request, res: Response): Promise<void> {
+  const { name, symbol } = req.body;
+
+  try {
+    const createTokenTxData = web3.eth.abi.encodeFunctionCall({
+      name: 'createToken',
+      type: 'function',
+      inputs: [
+        { type: 'string', name: 'name' },
+        { type: 'string', name: 'symbol' }
+      ]
+    }, [name, symbol]);
+
+    const receipt = await web3.eth.sendTransaction({
+      from: process.env.FROM_ADDRESS,
+      to: process.env.CONTRACT_ADDRESS,
+      data: createTokenTxData,
+    });
+
+    res.json({ message: 'Token creation transaction sent', transactionId: receipt.transactionHash });
+  } catch (error) {
+    console.error("Transaction error:", error);
+    res.status(500).send('Failed to create token');
+  }
+}
+
 function serveClientApp(req: Request, res: Response): void {
   res.sendFile(path.join(__dirname, '../client/build', 'index.html'));
 }
 
-// Routes
 app.post('/api/authenticate', generateToken);
 app.get('/api/token/:tokenId', authenticateToken, getTokenDetails);
+app.post('/api/createToken', authenticateToken, createToken);
 app.get('*', serveClientApp);
 
 app.listen(PORT, () => console.log(`Server is running on port ${PORT}`));
