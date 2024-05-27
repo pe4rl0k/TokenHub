@@ -3,60 +3,61 @@ import Web3 from 'web3';
 import TokenFactoryABI from './TokenFactoryABI.json';
 
 const TokenCreationForm: React.FC = () => {
-  const [web3, setWeb3] = useState<Web3 | null>(null);
-  const [account, setAccount] = useState<string>('');
+  const [web3Instance, setWeb3Instance] = useState<Web3 | null>(null);
+  const [userAccount, setUserAccount] = useState<string>('');
   const [tokenName, setTokenName] = useState('');
   const [tokenSymbol, setTokenSymbol] = useState('');
-  const [tokenSupply, setTokenSupply] = useState('');
-  const [tokenDecimals, setTokenDecimals] = useState<string>('18');
-  const [transactionStatus, setTransactionStatus] = useState('');
-  const [deployedTokenAddress, setDeployedTokenAddress] = useState('');
+  const [initialSupply, setInitialSupply] = useState('');
+  const [decimalCount, setDecimalCount] = useState<string>('18');
+  const [deploymentStatus, setDeploymentStatus] = useState('');
+  const [resultingTokenAddress, setResultingTokenAddress] = useState('');
 
-  const connectToBlockchain = async () => {
+  const initiateBlockchainConnection = async () => {
     if (window.ethereum) {
       try {
         await window.ethereum.request({ method: 'eth_requestAccounts' });
-        const localWeb3 = new Web3(window.ethereum);
-        setWeb3(localWeb3);
-        const accounts = await localWeb3.eth.getAccounts();
-        setAccount(accounts[0]);
+        const web3 = new Web3(window.ethereum);
+        setWeb3Instance(web3);
+        const accounts = await web3.eth.getAccounts();
+        setUserAccount(accounts[0]);
       } catch (error) {
-        setTransactionStatus('Failed to connect to blockchain.');
+        setDeploymentStatus('Failed to connect to the blockchain.');
       }
     } else {
-      setTransactionStatus('Please install MetaMask to use this feature.');
+      setDeploymentStatus('Please install MetaMask to use this feature.');
     }
   };
 
-  const deployToken = async () => {
-    if (!web3) {
-      setTransactionStatus('Web3 is not initialized.');
+  const createTokenOnBlockchain = async () => {
+    if (!web3Instance) {
+      setDeploymentStatus('Web3 instance is not initialized.');
       return;
     }
 
-    const tokenFactory = new web3.eth.Contract(
+    const tokenFactoryContract = new web3Instance.eth.Contract(
       TokenFactoryABI,
       process.env.REACT_APP_TOKEN_FACTORY_ADDRESS
     );
 
-    const decimals = parseInt(tokenDecimals);
-    const supplyWithDecimals = web3.utils.toBN(tokenSupply).mul(web3.utils.toBN(10).pow(web3.utils.toBN(decimals)));
+    const tokenDecimals = parseInt(decimalCount);
+    const supplyAdjustedForDecimals = web3Instance.utils.toBN(initialSupply).mul(web3Instance.utils.toBN(10).pow(web3Instance.utils.toBN(tokenDecimals)));
+    
     try {
-      setTransactionStatus('Deploying token...');
-      const gas = await tokenFactory.methods.createToken(tokenName, tokenSymbol, supplyWithDecimals.toString()).estimateGas({ from: account });
-      const response = await tokenFactory.methods
-        .createToken(tokenName, tokenSymbol, supplyWithDecimals.toString())
-        .send({ from: account, gas });
-      const tokenAddress = response.events.TokenCreated.returnValues.tokenAddress;
-      setDeployedTokenAddress(tokenAddress);
-      setTransactionStatus(`Token deployed successfully! Contract Address: ${tokenAddress}`);
+      setDeploymentStatus('Deploying token...');
+      const estimatedGas = await tokenFactoryContract.methods.createToken(tokenName, tokenSymbol, supplyAdjustedForDecimals.toString()).estimateGas({ from: userAccount });
+      const deploymentResponse = await tokenFactoryContract.methods
+        .createToken(tokenName, tokenSymbol, supplyAdjustedForDecimals.toString())
+        .send({ from: userAccount, gas: estimatedGas });
+      const newTokenAddress = deploymentResponse.events.TokenCreated.returnValues.tokenAddress;
+      setResultingTokenAddress(newTokenAddress);
+      setDeploymentStatus(`Token deployed successfully! Contract Address: ${newTokenAddress}`);
     } catch (error) {
-      setTransactionStatus('Failed to deploy token.');
+      setDeploymentStatus('Failed to deploy token.');
     }
   };
 
   useEffect(() => {
-    connectToBlockchain();
+    initiateBlockchainConnection();
   }, []);
 
   return (
@@ -72,18 +73,18 @@ const TokenCreationForm: React.FC = () => {
       </div>
       <div>
         <label>Supply:</label>
-        <input type="text" value={tokenSupply} onChange={e => setTokenSupply(e.target.value)} />
+        <input type="text" value={initialSupply} onChange={e => setInitialSupply(e.target.value)} />
       </div>
       <div>
         <label>Decimals:</label>
-        <input type="text" value={tokenDecimals} onChange={e => setTokenDecimals(e.target.value)} />
+        <input type="text" value={decimalCount} onChange={e => setDecimalCount(e.target.value)} />
       </div>
-      <button onClick={deployToken}>Deploy Token</button>
-      <div>Status: {transactionStatus}</div>
-      {deployedTokenAddress && (
+      <button onClick={createTokenOnBlockchain}>Deploy Token</button>
+      <div>Status: {deploymentStatus}</div>
+      {resultingTokenAddress && (
         <div>
           <h3>Deployment Successful</h3>
-          <a href={`https://etherscan.io/address/${deployedTokenAddress}`} target="_blank" rel="noopener noreferrer">View on Etherscan</a>
+          <a href={`https://etherscan.io/address/${resultingTokenAddress}`} target="_blank" rel="noopener noreferrer">View on Etherscan</a>
         </div>
       )}
     </div>
