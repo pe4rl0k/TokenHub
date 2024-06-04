@@ -9,6 +9,13 @@ interface Token {
   address: string;
 }
 
+interface ContractMethodResponse {
+  status: string;
+  message?: string;
+  transactionHash?: string;
+  receipt?: any; // Consider using a more specific type if your app will use properties from the receipt.
+}
+
 const useTokenFactory = () => {
   const [account, setAccount] = useState<string>('');
   const [tokenFactoryContract, setTokenFactoryContract] = useState<any>(null);
@@ -20,72 +27,86 @@ const useTokenFactory = () => {
   useEffect(() => {
     const initWeb3 = async () => {
       const web3 = new Web3(Web3.givenProvider || process.env.REACT_APP_INFURA_URL);
-      const tokenFactory = new web3.eth.Contract(
-        tokenFactoryABI as AbiItem[],
-        process.env.REACT_APP_TOKEN_FACTORY_ADDRESS
-      );
-      setTokenFactoryContract(tokenFactory);
       try {
+        const tokenFactory = new web3.eth.Contract(
+          tokenFactoryABI as AbiItem[],
+          process.env.REACT_APP_TOKEN_FACTORY_ADDRESS
+        );
+        setTokenFactoryContract(tokenFactory);
+
         const accounts = await web3.eth.getAccounts();
-        setAccount(accounts[0]);
-      } catch (e) {
-        console.error("Error fetching accounts", e);
-        setError('Failed to load user accounts');
+        if (accounts.length > 0) setAccount(accounts[0]);
+        else setError('No accounts found');
+      } catch (error) {
+        console.error("Error initializing Web3", error);
+        setError('Failed to initialize Web3');
       }
     };
     initWeb3();
   }, []);
 
-  const createToken = async (name: string, symbol: string, initialSupply: number) => {
-    if (!tokenFactoryContract || !account) return;
-
+  const handleTransactionEvents = (transaction: Promise<ContractMethodResponse>) => {
     setLoading(true);
     setCreationStatus('Creating...');
     setError(null);
 
-    try {
-      await tokenFactoryContract.methods
-        .createToken(name, symbol, initialSupply)
-        .send({ from: account })
-        .on('transactionHash', (hash: string) => {
-          console.log('Transaction Hash:', hash);
-        })
-        .on('receipt', (receipt: any) => {
-          setCreationStatus('Success');
-          setLoading(false);
+    transaction
+      .then(({ status, message, transactionHash, receipt }) => {
+        if (status === 'Success') {
+          console.log('Transaction Hash:', transactionHash);
+          setCreationStatus(status);
           fetchTokensCreatedByUser();
-        })
-        .on('error', (error: any) => {
-          setCreationStatus('Failed');
-          setLoading(false);
-          setError('Token creation failed');
-          console.error('Token creation error:', error);
-        });
-    } catch (error) {
-      setLoading(false);
-      setError('Token creation transaction failed');
-      console.error(error);
+        } else {
+          setError(message || 'Token creation failed');
+          console.error(message || 'Token creation failed', { transactionHash, receipt });
+        }
+      })
+      .catch(error => {
+        console.error('Token creation error:', error);
+        setError('Token creation transaction failed');
+      })
+      .finally(() => setLoading(false));
+  };
+
+  const createToken = (name: string, symbol: string, initialSupply: number) => {
+    if (!tokenFactoryContract || !account) {
+      setError('Token factory contract or account not set');
+      return;
     }
+
+    const transaction = tokenFactoryContract.methods
+      .createToken(name, symbol, initialSupply)
+      .send({ from: account })
+      .on('transactionHash', (hash: string) => ({ status: 'Pending', transactionHash: hash }))
+      .on('receipt', (receipt: any) => ({ status: 'Success', receipt }))
+      .on('error', (error: any) => ({ status: 'Failed', message: 'Token creation failed', receipt: error }));
+
+    handleTransactionEvents(transaction);
   };
 
   const fetchTokensCreatedByUser = useCallback(async () => {
-    if (!tokenFactoryContract || !account) return;
+    if (!tokenFactoryContract || !account) {
+      setError('Token factory contract or account not set');
+      return;
+    }
 
     setLoading(true);
     try {
       const tokens = await tokenFactoryContract.methods.getTokensByOwner(account).call();
-      setTokensCreatedByUser(tokens.map((tokenAddr: string) => ({ name: "", symbol: "", address: tokenAddr }))); // Adjust to match how your contract structures tokens
-      setLoading(false);
+      setTokensCreatedByUser(
+        tokens.map((tokenAddr: string) => ({ name: "", symbol: "", address: tokenAddr }))
+      );
     } catch (error) {
-      console.error(error);
-      setLoading(false);
+      console.error('Error fetching tokens', error);
       setError('Error fetching tokens');
+    } finally {
+      setLoading(false);
     }
   }, [account, tokenFactoryContract]);
 
   useEffect(() => {
-    fetchTokensCreatedByUser();
-  }, [fetchTokensCreatedByUser]);
+    if (account) fetchTokensCreatedByUser();
+  }, [fetchTokensCreatedByUser, account]);
 
   return { createToken, tokensCreatedByUser, creationStatus, loading, error };
 };
