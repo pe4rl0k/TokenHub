@@ -16,6 +16,9 @@ interface ContractMethodResponse {
   receipt?: any; // Consider using a more specific type if your app will use properties from the receipt.
 }
 
+// Simple in-memory cache
+const tokenCache = new Map<string, Array<Token>>();
+
 const useTokenFactory = () => {
   const [account, setAccount] = useState<string>('');
   const [tokenFactoryContract, setTokenFactoryContract] = useState<any>(null);
@@ -30,7 +33,7 @@ const useTokenFactory = () => {
       try {
         const tokenFactory = new web3.eth.Contract(
           tokenFactoryABI as AbiItem[],
-          process.env.REACT_APP_TOKEN_FACTORY_ADDRESS
+          process.env.REACT_APP_TOKEN_FACTORY_ADDRESS,
         );
         setTokenFactoryContract(tokenFactory);
 
@@ -55,6 +58,8 @@ const useTokenFactory = () => {
         if (status === 'Success') {
           console.log('Transaction Hash:', transactionHash);
           setCreationStatus(status);
+          // Invalidate cache after successful creation
+          tokenCache.delete(account);
           fetchTokensCreatedByUser();
         } else {
           setError(message || 'Token creation failed');
@@ -90,12 +95,17 @@ const useTokenFactory = () => {
       return;
     }
 
+    if (tokenCache.has(account)) {
+      setTokensCreatedByUser(tokenCache.get(account)!);
+      return;
+    }
+
     setLoading(true);
     try {
       const tokens = await tokenFactoryContract.methods.getTokensByOwner(account).call();
-      setTokensCreatedByUser(
-        tokens.map((tokenAddr: string) => ({ name: "", symbol: "", address: tokenAddr }))
-      );
+      const tokenList = tokens.map((tokenAddr: string) => ({ name: "", symbol: "", address: tokenAddr }));
+      tokenCache.set(account, tokenList);
+      setTokensCreatedByUser(tokenList);
     } catch (error) {
       console.error('Error fetching tokens', error);
       setError('Error fetching tokens');
