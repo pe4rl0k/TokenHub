@@ -8,80 +8,56 @@ import "../contracts/TokenFactory.sol";
 contract TestTokenFactory {
 
     uint public initialBalance = 10 ether;
-    TokenFactory tokenFactory;
+    TokenFactory private tokenFactory;
 
-    // Assuming TokenFactory emits this event on successful creation
-    event TokenCreated(address tokenAddress, string name, string symbol, uint256 totalSupply);
+    // Commonly used strings for token details
+    string private constant NAME = "ExampleToken";
+    string private constant SYMBOL = "EXM";
+    uint256 private constant TOTAL_SUPPLY = 1000000;
+    string private constant EMPTY_NAME_FAIL_MSG = "Token creation with empty name should have failed.";
+    string private constant ZERO_SUPPLY_FAIL_MSG = "Token creation with zero totalSupply should have failed.";
+    string private constant DUPLICATE_CREATION_FAIL_MSG = "Duplicate token genuine creation should have failed.";
+    string private constant FIRST_CREATION_SUCCESS_MSG = "First token creation should succeed.";
+    string private constant TOKEN_CREATION_ETHER_SUCCESS_MSG = "Token creation with ether should succeed if contract is payable and expects ether.";
+    string private constant FALLBACK_SUCCESS_MSG = "Fallback function should successfully receive ether.";
 
     function beforeEach() public {
         tokenFactory = new TokenFactory();
     }
 
     function testTokenCreation() public {
-        string memory name = "ExampleToken";
-        string memory symbol = "EXM";
-        uint256 totalSupply = 1000000;
-        
-        // Assuming createToken returns the token address on success
-        address tokenAddr = tokenFactory.createToken(name, symbol, totalSupply);
+        address tokenAddr = tokenFactory.createToken(NAME, SYMBOL, TOTAL_SUPPLY);
         Assert.notEqual(tokenAddr, address(0), "Token address should not be address(0) on successful creation.");
     }
 
     function testTokenCreationWithEmptyName() public {
-        string memory name = "";
-        string memory symbol = "EXM";
-        uint256 totalSupply = 1000000;
-        
-        // Demonstrating use of try/catch for error handling
-        try tokenFactory.createToken(name, symbol, totalSupply) {
-            Assert.fail("Token creation with empty name should have failed.");
-        } catch {
-            // Expected to fail, so catch block is intentionally left blank
-        }
+        try tokenFactory.createToken("", SYMBOL, TOTAL_SUPPLY) {
+            Assert.fail(EMPTY_NAME_FAIL_MSG);
+        } catch {}
     }
 
     function testTokenCreationWithZeroTotalSupply() public {
-        string memory name = "ExampleToken";
-        string memory symbol = "EXM";
-        uint256 totalSupply = 0;
-        
-        // Demonstrating use of try/catch for error handling
-        try tokenFactory.createToken(name, symbol, totalSupply) {
-            Assert.fail("Token creation with zero totalSupply should have failed.");
-        } catch {
-            // Expected to fail, failure is the correct outcome
-        }
+        try tokenFactory.createToken(NAME, SYMBOL, 0) {
+            Assert.fail(ZERO_SUPPLY_FAIL_MSG);
+        } catch {}
     }
 
     function testDuplicateTokenCreation() public {
-        string memory name = "DuplicateToken";
-        string memory symbol = "DUP";
-        uint256 totalSupply = 1000;
+        address tokenAddr1 = tokenFactory.createToken("DuplicateToken", "DUP", 1000);
+        Assert.notEqual(tokenAddr1, address(0), FIRST_CREATION_SUCCESS_MSG);
         
-        address tokenAddr1 = tokenFactory.createToken(name, symbol, totalSupply);
-        Assert.notEqual(tokenAddr1, address(0), "First token creation should succeed.");
-        
-        // Testing for duplicate creation
-        try tokenFactory.createToken(name, symbol, totalSupply) {
-            Assert.fail("Duplicate token creation should have failed.");
-        } catch {
-            // Duplicate creation should fail, so catch block is intentionally left blank
-        }
+        try tokenFactory.createToken("DuplicateToken", "DUP", 1000) {
+            Assert.fail(DUPLICATE_CREATION_FAIL_MSG);
+        } catch {}
     }
 
     function testTokenCreationWithEther() public {
-        string memory name = "PayableToken";
-        string memory symbol = "PAY";
-        uint256 totalSupply = 1000;
-        
-        // Assuming TokenFactory contract is modified to be payable and manages ether-based token creation
-        (bool success,) = address(tokenFactory).call{value: 1 ether}(abi.encodeWithSignature("createToken(string,string,uint256)", name, symbol, totalSupply));
-        Assert.isTrue(success, "Token creation with ether should succeed if contract is payable and expects ether.");
+        (bool success,) = address(tokenFactory).call{value: 1 ether}(abi.encodeWithSignature("createCombo(string,string,uint256)", "PayableToken", "PAY", 1000));
+        Assert.isTrue(success, TOKEN_CREATION_ETHER_SUCCESS_MSG);
     }
 
     function testFallbackReceivesEther() public {
-        // Intended to test that the contract can receive and handle ether properly
         (bool success,) = address(tokenFactory).call{value: 1 ether}("");
-        Assert.isTrue(success, "Fallback function should successfully receive ether.");
+        Assert.isTrue(success, FALLBACK_SUCCESS_MSG);
     }
 }
