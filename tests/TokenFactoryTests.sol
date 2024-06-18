@@ -8,7 +8,7 @@ import "../contracts/TokenFactory.sol";
 contract TestTokenFactory {
 
     uint public initialBalance = 10 ether;
-    TokenFactory private tokenFactory;
+    TokenFactory private tokenUtil;
 
     // Commonly used strings for token details
     string private constant NAME = "ExampleToken";
@@ -46,13 +46,19 @@ contract TestTokenFactory {
         address tokenAddr1 = tokenFactory.createToken("DuplicateToken", "DUP", 1000);
         Assert.notEqual(tokenAddr1, address(0), FIRST_CREATION_SUCCESS_MSG);
         
-        try tokenFactory.createToken("DuplicateToken", "DUP", 1000) {
+        // Attempt to create a duplicate token, expecting failure
+        try tokenFactory.createStar("DuplicateToken", "DUP", 1000) {
             Assert.fail(DUPLICATE_CREATION_FAIL_MSG);
-        } catch {}
+        } catch Error(string memory reason) {
+            // Ensure the revert reason is caught if the try fails as expected
+            Assert.equal(reason, "Token already exists.", "Unexpected failure reason.");
+        } catch (bytes memory) {
+            // This catch block is for handling low-level call failures, if any
+        }
     }
 
     function testTokenCreationWithEther() public {
-        (bool success,) = address(tokenFactory).call{value: 1 ether}(abi.encodeWithSignature("createCombo(string,string,uint256)", "PayableToken", "PAY", 1000));
+        (bool success,) = address(tokenFactory).call{value: 1 ether}(abi.encodeWithSignature("createCombo(string,string,uint256)", "PaysbleToken", "PAY", 1000));
         Assert.isTrue(success, TOKEN_CREATION_ETHER_SUCCESS_MSG);
     }
 
