@@ -10,6 +10,11 @@ process.env.REACT_APP_CONTRACT_ADDRESS = '0xContractAddress';
 process.env.REACT_APP_NETWORK = 'rinkeby';
 
 describe('TokenCreator Component Tests', () => {
+  beforeEach(() => {
+    // Resetting mocks before each test to ensure clean mock state
+    jest.clearAllMocks();
+  });
+
   test('should display error for empty form submission', async () => {
     render(<TokenCreator />);
     fireEvent.click(screen.getByRole('button', { name: /create token/i }));
@@ -53,6 +58,25 @@ describe('TokenCreator Component Tests', () => {
     fireEvent.change(screen.getByLabelText(/initial supply/i), { target: { value: '1000' } });
     fireEvent.click(screen.getByRole('button', { name: /create token/i }));
 
-    expect(await screen.findByText(/transaction hash: 0xTransactionPath/i)).toBeInTheDocument();
+    expect(await screen.findByText(/transaction hash: 0xTransactionHash/i)).toBeInTheDocument();
+  });
+
+  test('should display error message after failed blockchain call', async () => {
+    const expectedErrorMessage = "Blockchain transaction failed";
+    const mockEthersProvider = new ethers.providers.Web3Provider(window.ethereum);
+    const mockSigner = mockEthersProvider.getSigner();
+    ethers.providers.Web3Provider.mockReturnValue(mockEthersProvider);
+    mockEthersProvider.getSigner.mockReturnValue(mockSigner);
+    mockSigner.sendTransaction = jest.fn().mockRejectedValue(new Error(expectedErrorMessage));
+
+    render(<TokenCreator />);
+
+    fireEvent.change(screen.getByLabelText(/name/i), { target: { value: 'Test Token' } });
+    fireEvent.change(screen.getByLabelText(/symbol/i), { target: { value: 'TST' } });
+    fireEvent.change(screen.getByLabelText(/initial supply/i), { target: { value: '1000' } });
+    fireEvent.click(screen.getByRole('button', { name: /create token/i }));
+
+    // We assume here that your component catches the error and displays an alert or some text with it.
+    await waitFor(() => expect(screen.findByText(expectedErrorMessage)).toBeInTheDocument());
   });
 });
